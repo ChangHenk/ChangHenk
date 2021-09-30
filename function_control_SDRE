@@ -1,0 +1,72 @@
+% 20171115
+% Lin, Li-Gang
+% Example: Underactuated Two-Wheeled Inverted Pendulum mobile robot 
+% [KiKw: IEEE/ASME Mechatronics, accept 2017]
+% SDRE Function, SDC is constructed via Alg. 1 in [LiVaLi:15]
+% to compute and return the control input
+
+function [u Gain_lqr_data]= function_control_SDRE( t_temp, x_temp)
+
+global Q R g resolution
+global m_B m_W 
+global l r d 
+global I_1 I_2 I_3 
+global K J 
+
+% ---------------------------------  for loop -----------------------------
+for i_control=1: size( t_temp)
+    
+    x= [ x_temp(i_control,1); x_temp(i_control,2); x_temp(i_control,3); x_temp(i_control,4);... 
+        x_temp(i_control,5); x_temp(i_control,6)];
+    t= t_temp(i_control);
+
+
+    % X = [ x   x_dot  theta  theta_dot  psi   psi_dot ]
+    eta_1 =  m_B^2*l^2*(sin(x(3))^2)+ m_B*I_2+2*( m_W+ ( J/ (r^2) ) )* ( I_2+ m_B* (l^2) );
+    eta_2 = I_3+ 2*K+2*(m_W+ (J/ (r^2) ) )* (d^2)+ ( I_1+ m_B*(l^2)- I_3 )* ( sin(x(3))^2 );
+
+    % definition of a_2 and a_4 because of sin(theta)/theta
+    if abs(x(3))> resolution %exe: abs() 取絕對值
+        a_2=  (1/ eta_1)* ( sin(x(3))/ x(3) ) * ( -(m_B^2)*(l^2)*g*cos(x(3))+... 
+            (I_2+ m_B*(l^2))*m_B*l* (x(4)^2)+... 
+            m_B*l* ( I_2+m_B*(l^2)+ (I_3- I_1- m_B*(l^2) )* (cos(x(3))^2 ) )* (x(6)^2) );
+        a_4= (1/ eta_1)* ( sin(x(3))/ x(3) ) * (  (m_B+2*m_W+(2*J/(r^2)) )*m_B*l*g-...
+            (m_B^2)*(l^2)*(x(4)^2)*cos(x(3))-... 
+            ( (m_B^2)*(l^2)+ (I_3-I_1-m_B*(l^2))*(m_B+2*m_W+(2*J/(r^2))) )* (x(6)^2)*cos(x(3)) );
+        a_6= (1/ eta_2)* ( sin(x(3))/ x(3)) * (2*(I_3-I_1-m_B*l^2)*x(4)*x(6)*cos(x(3)) - m_B*l*x(2)*x(6));
+    else  % 與前面不同為捨去( sin(x(2))/ x(2) )
+        a_2=  (1/ eta_1) * ( -(m_B^2)*(l^2)*g*cos(x(3))+(I_2+ m_B*(l^2))*m_B*l* (x(4)^2)+... 
+            m_B*l* ( I_2+m_B*(l^2)+ (I_3- I_1- m_B*(l^2) )* (cos(x(3))^2 ) )* (x(6)^2) );
+        a_4= (1/ eta_1) * (  (m_B+2*m_W+(2*J/(r^2)) )*m_B*l*g-(m_B^2)*(l^2)*(x(4)^2)*cos(x(3))-... 
+            ( (m_B^2)*(l^2)+ (I_3-I_1-m_B*(l^2))*(m_B+2*m_W+(2*J/(r^2))) )* (x(6)^2)*cos(x(3)) ); 
+        a_6= (1/ eta_2) * (2*(I_3-I_1-m_B*l^2)*x(4)*x(6)*cos(x(3)) - m_B*l*x(2)*x(6));
+    end % end if for the case of sin(theta)/theta    
+
+    a_62=  -m_B*l*x(6)*sin(x(3))/ eta_2;
+    a_64=  2*(I_3-I_1-m_B*(l^2))*x(6)*sin(x(3))*cos(x(3))/ eta_2;
+
+    %typical SDC
+    A( 1, 1:6 )=[ 0 1  0  0 0 0 ];
+    A( 2, 1:6 )=[ 0 0 a_2 0 0 0 ];
+    A( 3, 1:6 )=[ 0 0  0  1 0 0 ];
+    A( 4, 1:6 )=[ 0 0 a_4 0 0 0 ];
+    A( 5, 1:6 )=[ 0 0  0  0 0 1 ];
+    A( 6, 1:6 )=[ 0 0 a_6 0 0 0 ];
+
+    f= A*x(:);
+
+    b_2= ( (I_2+m_B*(l^2) )/r+ m_B*l*cos(x(3)) )/ eta_1;
+    b_4= -( (m_B*l*cos(x(3)) )/r+ m_B+ 2*m_W+ (2*J/(r^2)) )/ eta_1;
+    b_6= -( d/r )/ eta_2;
+
+    B= [ 0 0;b_2 b_2;0 0;b_4 b_4;0 0;b_6 -b_6 ];
+
+    [ Gain_lqr, Sol_P, eig_Acl ]= lqr( A, B, Q, R);
+    
+    Gain_lqr_data(:,:,i_control)=Gain_lqr;% 存儲每筆的Gain_lqr
+    
+    u(i_control, :)= -Gain_lqr* x(:);
+%    
+
+end % end for
+% ---------------------------------end of for loop ------------------------
