@@ -1,0 +1,60 @@
+% 20171115
+% Lin, Li-Gang
+% Example: Underactuated Two-Wheeled Inverted Pendulum mobile robot 
+% [KiKw: IEEE/ASME Mechatronics, accept 2017]
+% SDRE Function, SDC is constructed via Alg. 1 in [LiVaLi:15]
+
+function [xdot]= function_SDRE(t,x)
+
+%[ t x' ]
+
+global Q R g resolution
+global m_B m_W 
+global l r d 
+global I_1 I_2 I_3 
+global K J 
+
+% In accordance with [KiKw: IEEE/ASME Mechatronics, accept 2017]
+
+% X = [ x   x_dot  theta  theta_dot  psi   psi_dot ]
+eta_1 =  m_B^2*l^2*(sin(x(3))^2)+ m_B*I_2+2*( m_W+ ( J/ (r^2) ) )* ( I_2+ m_B* (l^2) );
+eta_2 = I_3+ 2*K+2*(m_W+ (J/ (r^2) ) )* (d^2)+ ( I_1+ m_B*(l^2)- I_3 )* ( sin(x(3))^2 );
+
+% definition of a_2 and a_4 because of sin(theta)/theta
+if abs(x(3))> resolution %exe: abs() �������
+    a_2=  (1/ eta_1)* ( sin(x(3))/ x(3) ) * ( -(m_B^2)*(l^2)*g*cos(x(3))+... 
+        (I_2+ m_B*(l^2))*m_B*l* (x(4)^2)+... 
+        m_B*l* ( I_2+m_B*(l^2)+ (I_3- I_1- m_B*(l^2) )* (cos(x(3))^2 ) )* (x(6)^2) );
+    a_4= (1/ eta_1)* ( sin(x(3))/ x(3) ) * (  (m_B+2*m_W+(2*J/(r^2)) )*m_B*l*g-...
+        (m_B^2)*(l^2)*(x(4)^2)*cos(x(3))-... 
+        ( (m_B^2)*(l^2)+ (I_3-I_1-m_B*(l^2))*(m_B+2*m_W+(2*J/(r^2))) )* (x(6)^2)*cos(x(3)) );
+    a_6= (1/ eta_2)* ( sin(x(3))/ x(3)) * (2*(I_3-I_1-m_B*l^2)*x(4)*x(6)*cos(x(3)) - m_B*l*x(2)*x(6));
+else  % �P�e�����P���˥h( sin(x(2))/ x(2) )
+    a_2=  (1/ eta_1) * ( -(m_B^2)*(l^2)*g*cos(x(3))+(I_2+ m_B*(l^2))*m_B*l* (x(4)^2)+... 
+        m_B*l* ( I_2+m_B*(l^2)+ (I_3- I_1- m_B*(l^2) )* (cos(x(3))^2 ) )* (x(6)^2) );
+    a_4= (1/ eta_1) * (  (m_B+2*m_W+(2*J/(r^2)) )*m_B*l*g-(m_B^2)*(l^2)*(x(4)^2)*cos(x(3))-... 
+        ( (m_B^2)*(l^2)+ (I_3-I_1-m_B*(l^2))*(m_B+2*m_W+(2*J/(r^2))) )* (x(6)^2)*cos(x(3)) ); 
+    a_6= (1/ eta_2) * (2*(I_3-I_1-m_B*l^2)*x(4)*x(6)*cos(x(3)) - m_B*l*x(2)*x(6));
+end % end if for the case of sin(theta)/theta    
+
+%typical SDC
+A( 1, 1:6 )=[ 0 1  0  0 0 0 ];
+A( 2, 1:6 )=[ 0 0 a_2 0 0 0 ];
+A( 3, 1:6 )=[ 0 0  0  1 0 0 ];
+A( 4, 1:6 )=[ 0 0 a_4 0 0 0 ];
+A( 5, 1:6 )=[ 0 0  0  0 0 1 ];
+A( 6, 1:6 )=[ 0 0 a_6 0 0 0 ];
+
+f= A*x(:);
+
+b_2= ( (I_2+m_B*(l^2) )/r+ m_B*l*cos(x(3)) )/ eta_1;
+b_4= -( (m_B*l*cos(x(3)) )/r+ m_B+ 2*m_W+ (2*J/(r^2)) )/ eta_1;
+b_6= -( d/r )/ eta_2;
+
+B= [ 0 0;b_2 b_2;0 0;b_4 b_4;0 0;b_6 -b_6 ];
+
+[ Gain_lqr, Sol_P, eig_Acl ]= lqr( A, B, Q, R);
+u= -Gain_lqr* x(:);
+
+xdot= f+ B* u;
+
